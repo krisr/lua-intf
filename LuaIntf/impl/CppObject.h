@@ -205,14 +205,14 @@ template <typename T>
 class CppObjectValue : public CppObject
 {
 private:
-    CppObjectValue()
-    : CppObject(&m_data[0])
+    CppObjectValue(typename std::remove_const<T>::type* ptr)
+    : CppObject(static_cast<void*>(ptr)),
+      m_object(ptr)
         {}
-
+  
     virtual ~CppObjectValue()
     {
-        T* obj = static_cast<T*>(ptr());
-        obj->~T();
+      delete m_object;
     }
 
 public:
@@ -223,19 +223,19 @@ public:
     static void pushToStack(lua_State* L, std::tuple<P...>& args, bool is_const)
     {
         void* mem = allocate<CppObjectValue<T>, T>(L, is_const);
-        CppObjectValue<T>* v = new (mem) CppObjectValue<T>();
-        CppInvokeClassConstructor<T, P...>::call(v->ptr(), args);
+        T* t = CppInvokeClassConstructor<T, P...>::call(args);
+        new (mem) CppObjectValue<T>(t);
     }
 
     static void pushToStack(lua_State* L, const T& obj, bool is_const)
     {
         void* mem = allocate<CppObjectValue<T>, T>(L, is_const);
-        CppObjectValue<T>* v = new (mem) CppObjectValue<T>();
-        new (v->ptr()) T(obj);
+        typename std::remove_const<T>::type* t = new typename std::remove_const<T>::type(obj);
+        new (mem) CppObjectValue<T>(t);
     }
 
 private:
-    char m_data[sizeof(T)];
+  T* m_object;
 };
 
 //----------------------------------------------------------------------------
@@ -388,12 +388,12 @@ struct LuaCppObjectFactory <T, T, false, false>
 {
     static void push(lua_State* L, const T& obj, bool is_const)
     {
-        CppObjectValue<T>::pushToStack(L, obj, is_const);
+        CppObjectValue<T>::pushToStack(L, obj, is_const); // xcxc needs to align ptr
     }
 
     static T& cast(lua_State*, CppObject* obj)
     {
-        return *static_cast<T*>(obj->ptr());
+        return *static_cast<T*>(obj->ptr()); // xcxc needs to align ptr
     }
 };
 
