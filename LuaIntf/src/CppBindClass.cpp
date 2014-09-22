@@ -310,8 +310,3 @@ LUA_INLINE void CppBindClassBase::setMemberFunction(const char* name, const LuaR
     m_meta.rawget<LuaRef>("___const").rawset(name,
         is_const ? proc : LuaRef::createFunctionWithUpvalues(state(), &CppBindClassMetaMethod::errorConstMismatch, name));
 }
-
-LUA_INLINE CppBindModule CppBindClassBase::endClass()
-{
-    return CppBindModule(m_meta.rawget<LuaRef>("___module"));
-}

@@ -359,11 +359,6 @@ public:
         return m_meta;
     }
 
-    /**
-     * Continue registration in the enclosing module.
-     */
-    CppBindModule endClass();
-
 protected:
     LuaRef m_meta;
 };
@@ -373,10 +368,11 @@ protected:
 /**
  * Provides a class registration in a lua_State.
  */
-template <typename T>
+template <typename T, typename PARENT>
 class CppBindClass : public CppBindClassBase
 {
     friend class CppBindModule;
+    template <typename T2, typename P2> friend class CppBindClass;
 
 private:
     explicit CppBindClass(const LuaRef& meta)
@@ -390,7 +386,7 @@ private:
      * @param name the name of class
      * @return new or existing class
      */
-    static CppBindClass<T> bind(LuaRef& parent_meta, const char* name)
+    static CppBindClass<T, PARENT> bind(LuaRef& parent_meta, const char* name)
     {
         LuaRef meta;
         if (buildMetaTable(meta, parent_meta, name,
@@ -399,7 +395,7 @@ private:
             meta.rawget<LuaRef>("___class").rawset("__gc", &CppBindClassDestructor<T, false>::call);
             meta.rawget<LuaRef>("___const").rawset("__gc", &CppBindClassDestructor<T, true>::call);
         }
-        return CppBindClass<T>(meta);
+        return CppBindClass<T, PARENT>(meta);
     }
 
     /**
@@ -410,7 +406,7 @@ private:
      * @param super_type_id the super class id
      * @return new or existing class
      */
-    static CppBindClass<T> extend(LuaRef& parent_meta, const char* name, void* super_type_id)
+    static CppBindClass<T, PARENT> extend(LuaRef& parent_meta, const char* name, void* super_type_id)
     {
         LuaRef meta;
         if (buildMetaTable(meta, parent_meta, name,
@@ -419,7 +415,7 @@ private:
             meta.rawget<LuaRef>("___class").rawset("__gc", &CppBindClassDestructor<T, false>::call);
             meta.rawget<LuaRef>("___const").rawset("__gc", &CppBindClassDestructor<T, true>::call);
         }
-        return CppBindClass<T>(meta);
+        return CppBindClass<T, PARENT>(meta);
     }
 
 public:
@@ -440,7 +436,7 @@ public:
     /**
      * Copy assignment.
      */
-    CppBindClass<T>& operator = (const CppBindClass<T>& that)
+    CppBindClass<T, PARENT>& operator = (const CppBindClass<T, PARENT>& that)
     {
         m_meta = that.m_meta;
         return *this;
@@ -449,7 +445,7 @@ public:
     /**
      * Move assignment for temporaries.
      */
-    CppBindClass<T>& operator = (CppBindClass<T>&& that)
+    CppBindClass<T, PARENT>& operator = (CppBindClass<T, PARENT>&& that)
     {
         m_meta = std::move(that.m_meta);
         return *this;
@@ -459,7 +455,7 @@ public:
      * Add or replace a static data member.
      */
     template <typename V>
-    CppBindClass<T>& addStaticVariable(const char* name, V* v, bool writable = true)
+    CppBindClass<T, PARENT>& addStaticVariable(const char* name, V* v, bool writable = true)
     {
         setStaticGetter(name, LuaRef::createFunctionWithPtr(state(), &CppBindVariable<V>::get, v));
         if (writable) {
@@ -474,7 +470,7 @@ public:
      * Add or replace a read-write property.
      */
     template <typename FG, typename FS>
-    CppBindClass<T>& addStaticProperty(const char* name, const FG& get, const FS& set)
+    CppBindClass<T, PARENT>& addStaticProperty(const char* name, const FG& get, const FS& set)
     {
         static_assert(!std::is_function<FG>::value, "function pointer is needed, please prepend & to function name");
         static_assert(!std::is_function<FS>::value, "function pointer is needed, please prepend & to function name");
@@ -489,7 +485,7 @@ public:
      * Add or replace a read-only property.
      */
     template <typename FN>
-    CppBindClass<T>& addStaticProperty(const char* name, const FN& get)
+    CppBindClass<T, PARENT>& addStaticProperty(const char* name, const FN& get)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppGetter = CppBindMethod<FN, FN, 1, 1>;
@@ -502,7 +498,7 @@ public:
      * Add or replace a static member function.
      */
     template <typename FN>
-    CppBindClass<T>& addStaticFunction(const char* name, const FN& proc)
+    CppBindClass<T, PARENT>& addStaticFunction(const char* name, const FN& proc)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppProc = CppBindMethod<FN>;
@@ -514,7 +510,7 @@ public:
      * Add or replace a static member function, user can specify augument spec.
      */
     template <typename FN, typename ARGS>
-    CppBindClass<T>& addStaticFunction(const char* name, const FN& proc, ARGS)
+    CppBindClass<T, PARENT>& addStaticFunction(const char* name, const FN& proc, ARGS)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppProc = CppBindMethod<FN, ARGS>;
@@ -533,7 +529,7 @@ public:
      * The template parameter should matches the desired Constructor
      */
     template <typename ARGS>
-    CppBindClass<T>& addConstructor(ARGS)
+    CppBindClass<T, PARENT>& addConstructor(ARGS)
     {
         m_meta.rawset("__call", &CppBindClassConstructor<T, T, ARGS>::call);
         return *this;
@@ -549,7 +545,7 @@ public:
      * like a function. You can have only one constructor or factory function for a lua class.
      */
     template <typename SP, typename ARGS>
-    CppBindClass<T>& addConstructor(SP*, ARGS)
+    CppBindClass<T, PARENT>& addConstructor(SP*, ARGS)
     {
         m_meta.rawset("__call", &CppBindClassConstructor<SP, T, ARGS>::call);
         return *this;
@@ -567,7 +563,7 @@ public:
      * like a function. You can have only one constructor or factory function for a lua class.
      */
     template <typename FN>
-    CppBindClass<T>& addFactory(const FN& proc)
+    CppBindClass<T, PARENT>& addFactory(const FN& proc)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppProc = CppBindMethod<FN, FN, 2>;
@@ -587,7 +583,7 @@ public:
      * like a function. You can have only one constructor or factory function for a lua class.
      */
     template <typename FN, typename ARGS>
-    CppBindClass<T>& addFactory(const FN& proc, ARGS)
+    CppBindClass<T, PARENT>& addFactory(const FN& proc, ARGS)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppProc = CppBindMethod<FN, ARGS, 2>;
@@ -600,7 +596,7 @@ public:
      * the type of the data member is copy assignable.
      */
     template <typename V>
-    typename std::enable_if<std::is_copy_assignable<V>::value, CppBindClass<T>&>::type addVariable(const char* name, V T::* v, bool writable = true)
+    typename std::enable_if<std::is_copy_assignable<V>::value, CppBindClass<T, PARENT>&>::type addVariable(const char* name, V T::* v, bool writable = true)
     {
         setMemberGetter(name, LuaRef::createFunction(state(), &CppBindClassVariable<T, V>::get, v));
         if (writable) {
@@ -615,7 +611,7 @@ public:
      * Add or replace a const read-only data member.
      */
     template <typename V>
-    CppBindClass<T>& addVariable(const char* name, const V T::* v)
+    CppBindClass<T, PARENT>& addVariable(const char* name, const V T::* v)
     {
         setMemberGetter(name, LuaRef::createFunction(state(), &CppBindClassVariable<T, V>::get, v));
         setMemberReadOnly(name);
@@ -626,7 +622,7 @@ public:
      * Add or replace a property member.
      */
     template <typename FG, typename FS>
-    CppBindClass<T>& addProperty(const char* name, const FG& get, const FS& set)
+    CppBindClass<T, PARENT>& addProperty(const char* name, const FG& get, const FS& set)
     {
         static_assert(!std::is_function<FG>::value, "function pointer is needed, please prepend & to function name");
         static_assert(!std::is_function<FS>::value, "function pointer is needed, please prepend & to function name");
@@ -641,7 +637,7 @@ public:
      * Add or replace a read-only property member.
      */
     template <typename FN>
-    CppBindClass<T>& addProperty(const char* name, const FN& get)
+    CppBindClass<T, PARENT>& addProperty(const char* name, const FN& get)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppGetter = CppBindClassMethod<T, FN, FN, 1>;
@@ -654,7 +650,7 @@ public:
      * Add or replace a member function.
      */
     template <typename FN>
-    CppBindClass<T>& addFunction(const char* name, const FN& proc)
+    CppBindClass<T, PARENT>& addFunction(const char* name, const FN& proc)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppProc = CppBindClassMethod<T, FN>;
@@ -666,7 +662,7 @@ public:
      * Add or replace a member function, user can specify augument spec.
      */
     template <typename FN, typename ARGS>
-    CppBindClass<T>& addFunction(const char* name, const FN& proc, ARGS)
+    CppBindClass<T, PARENT>& addFunction(const char* name, const FN& proc, ARGS)
     {
         static_assert(!std::is_function<FN>::value, "function pointer is needed, please prepend & to function name");
         using CppProc = CppBindClassMethod<T, FN, ARGS>;
@@ -674,5 +670,29 @@ public:
         return *this;
     }
 
+    /**
+     * Open a new or existing class for registrations.
+     */
+    template <typename T2>
+    CppBindClass<T2, CppBindClass<T, PARENT>> beginClass(const char* name)
+    {
+        return CppBindClass<T2, CppBindClass<T, PARENT>>::bind(m_meta, name);
+    }
+
+    /**
+     * Open a new class to extend the base class.
+     */
+    template <typename T2, typename SUPER>
+    CppBindClass<T2, CppBindClass<T, PARENT>> beginExtendClass(const char* name)
+    {
+        return CppBindClass<T2, CppBindClass<T, PARENT>>::extend(m_meta, name, CppObjectType<SUPER>::staticID());
+    }
+    
+    /**
+     * Continue registration in the enclosing module.
+     */
+    PARENT endClass() {
+      return PARENT(m_meta.rawget<LuaRef>("___module"));
+    }
 };
 
