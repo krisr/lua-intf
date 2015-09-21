@@ -1299,7 +1299,7 @@ private:
     template <typename P0, typename... P>
     static void pushArg(lua_State* L, P0&& p0, P&&... p)
     {
-        Lua::push(L, std::forward<P0>(p0));
+        Lua::push<P0>(L, std::forward<P0>(p0));
         pushArg(L, std::forward<P>(p)...);
     }
 
